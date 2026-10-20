@@ -20,6 +20,7 @@ let speciesList = null;
 const sugg = {};      // species -> suggest_set result
 const stats = {};     // slot -> computed stats
 const autoRes = {};   // slot -> auto spread report
+const bench = {};     // slot -> benchmarks of the spread as it is now (live)
 let mates = null;
 const why = {};       // slot -> complete_set result (move reasons, team needs)
 let coverage = null;  // coverage.analyse of the whole team
@@ -44,9 +45,13 @@ async function suggestions(species) {
 
 async function refreshStats(i) {
   const m = team[i];
-  if (!m.species) { delete stats[i]; return; }
-  const r = await api.post('/api/build/stats', {species: m.species, nature: m.nature, sp: m.sp, item: m.item});
+  if (!m.species) { delete stats[i]; delete bench[i]; return; }
+  const [r, b] = await Promise.all([
+    api.post('/api/build/stats', {species: m.species, nature: m.nature, sp: m.sp, item: m.item}),
+    api.post('/api/build/benchmarks', {species: m.species, nature: m.nature, item: m.item, ability: m.ability,
+      moves: m.moves.filter(Boolean), sp: m.sp, team: team.filter(x => x.species)})]);
   stats[i] = r.ok ? {...r.data.stats, form: r.data.form, types: r.data.types || []} : null;
+  bench[i] = b.ok && !b.data.error ? b.data : null;
 }
 
 async function fillUsual(i) {
@@ -114,14 +119,16 @@ const autoOpts = {};  // slot -> {required: Set of goal ids, offence}
 async function autoSpread(i) {
   const m = team[i];
   const o = autoOpts[i] || (autoOpts[i] = {required: new Set(), offence: 1});
+  const fromCurrent = Object.values(m.sp).some(v => Number(v) > 0);
   message = `Working out a spread for ${m.species} against the top threats...`;
   render();
   const r = await api.post('/api/build/autospread', {species: m.species, nature: m.nature, item: m.item, ability: m.ability,
-    moves: m.moves.filter(Boolean), required: [...o.required], offence: o.offence, team: team.filter(x => x.species)});
+    moves: m.moves.filter(Boolean), required: [...o.required], offence: o.offence, team: team.filter(x => x.species),
+    anchor: m.sp});  // start from the current spread: points move only where they buy benchmarks
   if (!r.ok || r.data.error) { message = (r.data && r.data.error) || 'Auto spread failed.'; return render(); }
   m.sp = {...empty().sp, ...r.data.sp};
   autoRes[i] = r.data;
-  message = r.data.required_met === false ? 'No spread meets every goal you ticked: this is the closest.' :
+  message = fromCurrent && r.data.moved === 0 ? 'Auto spread: no change to your spread meets more benchmarks.' : r.data.required_met === false ? 'No spread meets every goal you ticked: this is the closest.' :
     (r.data.warnings && r.data.warnings.length ? `Some calcs failed: ${r.data.warnings.join('; ')}` : '');
   save(); await refreshStats(i); render();
 }
@@ -161,6 +168,15 @@ async function importText(text) {
 export async function loadIntoBuilder(text) { await importText(text); }
 // The current Build draft as Showdown text (Practice: "my Build team").
 export function buildTeamText() { return exportText(); }
+
+// Moves for the typeahead: the usual ones (with how often they are used), then every other
+// move this Pokemon can learn.
+function moveOptions(s) {
+  if (!s) return [];
+  const used = s.moves || [];
+  const seen = new Set(used.map(x => x.name));
+  return [...used, ...(s.learnset || []).filter(x => !seen.has(x))];
+}
 
 function datalist(id, items) {
   return el('datalist', {id}, ...items.map(x => el('option', {value: x.name || x, label: x.share != null ? `${Math.round(100 * x.share)}%` : ''})));
@@ -215,7 +231,7 @@ function slotCard(m, i) {
   const item = typeahead(el('input', {type: 'text', placeholder: 'Item', value: m.item,
     onchange: async e => { set('item', e.target.value); m.fixed = {...(m.fixed || {}), item: e.target.value}; save(); await Promise.all([refreshStats(i), refreshCoverage()]); render(); }}), `items-${i}`);
   const abilities = s && s.abilities_possible ? s.abilities_possible : [];
-  const ability = el('select', {onchange: e => { set('ability', e.target.value); m.fixed = {...(m.fixed || {}), ability: e.target.value}; save(); }},
+  const ability = el('select', {onchange: async e => { set('ability', e.target.value); m.fixed = {...(m.fixed || {}), ability: e.target.value}; save(); await refreshStats(i); render(); }},
     ...[...new Set([m.ability, ...abilities].filter(Boolean))].map(a => el('option', {value: a, text: a, selected: a === m.ability})));
   const nature = el('select', {onchange: async e => { set('nature', e.target.value); m.fixed = {...(m.fixed || {}), nature: e.target.value}; save(); await refreshStats(i); render(); }},
     ...NATURES.map(n => el('option', {value: n, text: n, selected: n === m.nature})));
@@ -225,7 +241,7 @@ function slotCard(m, i) {
       const fs = new Set(m.fixedSlots || []);
       if (m.moves[k]) fs.add(k); else fs.delete(k);
       m.fixedSlots = [...fs]; save();
-      await refreshCoverage(); render();
+      await Promise.all([refreshStats(i), refreshCoverage()]); render();
     }}), `moves-${i}`));
   const w = why[i];
   const reasons = w && w.move_reasons ? el('ul', {class: 'small dim reasons'},
@@ -251,10 +267,12 @@ function slotCard(m, i) {
     el('select', {'aria-label': 'offence weight', onchange: e => { o.offence = Number(e.target.value); }},
       ...[[0.5, 'bulk first'], [1, 'balanced'], [1.5, 'offence first'], [2.5, 'all-out offence']].map(([v, t]) =>
         el('option', {value: v, text: t, selected: o.offence === v}))));
-  const goals = ar ? el('details', {class: 'bsec', open: o.required.size > 0},
-    el('summary', {text: `Auto spread: ${ar.met}/${ar.total_goals} benchmarks met vs the top threats${ar.required_met === false ? ' (not every must-meet goal)' : ''}`}),
-    el('p', {class: 'small dim', text: 'Tick goals that must be met (e.g. survive Dire Claw and OHKO Garchomp), then run it again.'}),
-    el('ul', {class: 'small goals'}, ...ar.goals.map(g => el('li', {class: g.met ? 'met' : 'unmet'},
+  const bk = bench[i];
+  const goals = bk ? el('details', {class: 'bsec', open: o.open !== false,
+    ontoggle: e => { o.open = e.target.open; }},
+    el('summary', {text: `Benchmarks for this spread: ${bk.met}/${bk.total_goals} met vs the top threats${ar && ar.required_met === false ? ' (auto spread could not meet every ticked goal)' : ''}`}),
+    el('p', {class: 'small dim', text: 'Recalculated as you change the set. Opponents use their most common set and spread. Tick goals auto spread must meet, then run it.'}),
+    el('ul', {class: 'small goals'}, ...bk.goals.map(g => el('li', {class: g.met ? 'met' : 'unmet'},
       el('input', {type: 'checkbox', checked: o.required.has(g.id), 'aria-label': `must meet: ${g.goal}`,
         onchange: e => { if (e.target.checked) o.required.add(g.id); else o.required.delete(g.id); }}),
       ` ${g.met ? (g.full ? '✓' : '½') : '✗'} ${g.goal}`)))) : null;
@@ -280,7 +298,7 @@ function slotCard(m, i) {
         onclick: () => autoSpread(i)}), balance),
       spreads, goals, usageBlock(s)),
     datalist(`items-${i}`, s && s.items ? s.items : []),
-    datalist(`moves-${i}`, s && s.moves ? s.moves : []));
+    datalist(`moves-${i}`, moveOptions(s)));
 }
 
 // Per threat: the team's best hit on it (who, which move), who takes its best hit

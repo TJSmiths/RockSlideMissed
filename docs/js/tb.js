@@ -106,9 +106,18 @@ function commonSets(name) {
   return (CACHE[key] = out);
 }
 
+// Moves this species can learn in Champions (Megas and other battle formes: their base species').
+function learnset(name) {
+  const sets = D.learnsets || {};
+  let sid = toId(name);
+  if (!sets[sid]) sid = (species(sid) || {}).baseSpecies || sid;
+  return sets[sid] || [];
+}
+
 export function suggestSet(name) {
   const sid = toId(name);
   const s = {...commonSets(name)};
+  s.learnset = learnset(sid).map(moveName).sort();
   if (!s.n) return s;
   if (!s.abilities_possible) s.abilities_possible = ((species(sid) || {}).abilities || []).map(abilityName);
   if (!s.spreads) s.spreads = (F.spreads[speciesName(sid)] || []).slice(0, 3).map(([sp, nat, sh]) => ({sp, nature: natureName(nat), share: Math.round(100 * sh) / 100, source: 'ladder 1760+'}));
@@ -602,14 +611,15 @@ export function teammateFit(team, top = 12) {
 const damaging = moves => moves.map(m => move(m)).filter(i => i && ['Physical', 'Special'].includes(i.category) && (i.basePower || 0) > 0).map(i => i.name);
 
 export function autoSpread({species: name, nature, item: it, ability, moves, step = 2, required = [], offence = null,
-  weights = {}, team_weather = []}) {
+  weights = {}, team_weather = [], anchor: start = null}) {
   const W = F.weights;
   let speedW = W.speed;
   const form = megaForme(name, it) || toId(name);
   const mega = species(form) || {};
   if (mega.isMega && mega.abilities) ability = abilityName(mega.abilities[0]);
   const th = threatsOf(12).filter(t => toId(t.base) !== toId(name));
-  let anchor = playersSpread(name, nature);
+  let anchor = start ? {...start} : playersSpread(name, nature);  // your spread, else players' usual one
+  const role = playersSpread(name, nature);  // how much speed matters: players' usual spread, even from yours
   const grid = [...new Set([...Array(PER_STAT / step + 1).keys()].map(k => k * step)
     .concat(anchor ? ['hp', 'def', 'spd', 'atk', 'spa'].map(k => anchor[k] || 0) : []))].sort((a, b) => a - b);
   const mine = damaging(moves).filter(m => !((move(m) || {}).flags || []).includes('recharge'));
@@ -694,7 +704,7 @@ export function autoSpread({species: name, nature, item: it, ability, moves, ste
     if (g.kind === 'ko') return (dealt[gid] || {})[off] || 0;
     return 0;
   };
-  if (anchor) speedW *= Math.min(1, (anchor.spe || 0) / PER_STAT);  // players' speed investment: how much speed matters
+  if (role) speedW *= Math.min(1, (role.spe || 0) / PER_STAT);  // players' speed investment: how much speed matters
   const kindW = {ko: offence, speed: speedW};
   const gw = gids.map(gid => goals[gid].usage * (kindW[goals[gid].kind] ?? 1) * (weights[gid] ?? 1));
   const score = a => gids.reduce((s, gid, k) => s + gw[k] * (met(gid, ...a) + W.partial * part(gid, ...a)), 0);
@@ -760,7 +770,71 @@ export function autoSpreadRequest(b) {
   const offence = F.weights.offence * Math.max(0.25, Math.min(3, Number(b.offence) || 1));
   return autoSpread({species: b.species || '', nature: b.nature || 'Serious', item: b.item, ability: b.ability,
     moves: b.moves || [], required: (b.required || []).slice(0, 12).map(String), offence,
-    team_weather: teamWeathers((b.team || []).slice(0, 6))});
+    team_weather: teamWeathers((b.team || []).slice(0, 6)), anchor: anchorOf(b.anchor)});
+}
+
+// Auto spread starts from your current spread when it has points.
+function anchorOf(sp) {
+  if (!sp || !STATS.some(k => Number(sp[k]) > 0)) return null;
+  return Object.fromEntries(STATS.map(k => [k, Math.max(0, Math.min(PER_STAT, Number(sp[k]) || 0))]));
+}
+
+// The auto spread benchmarks for this exact spread (live in Build): against each top threat
+// (its most common set and spread), outspeed it, survive its strongest hit from full HP on
+// every roll, KO / 2HKO it with your best attack.
+export function benchmarks(b) {
+  const name = b.species || '', nature = b.nature || 'Serious', it = b.item || null;
+  let ability = b.ability || null;
+  const form = megaForme(name, it) || toId(name);
+  const mega = species(form) || {};
+  if (mega.isMega && mega.abilities) ability = abilityName(mega.abilities[0]);
+  const sp = anchorOf(b.sp) || {};
+  const th = threatsOf(12).filter(t => toId(t.base) !== toId(name));
+  const mine = damaging(b.moves || []).filter(m => !((move(m) || {}).flags || []).includes('recharge'));
+  const slow = (NATURES[toId(nature)] || [])[1] === 'spe';
+  const me = {species: form, item: it, ability, nature, sp};
+  const inWeather = teamWeathers((b.team || []).slice(0, 6)).includes(WEATHER_SPEED[toId(ability)]);
+  const mult = (toId(it) === 'choicescarf' ? 1.5 : 1) * (inWeather ? 2 : 1);
+  const mySpe = Math.floor((stats(form, nature, sp).spe || 0) * mult);
+  const topSpe = Math.floor((stats(form, nature, {spe: PER_STAT}).spe || 0) * mult);
+  const errors = new Set();
+  const pct = (r, x) => Math.round(100 * r[x] / Math.max(1, r.defenderHp));
+  const out = [];
+  for (const t of th) {
+    const nm = t.species;
+    const them = {species: t.species, item: t.item || null, ability: t.ability || null, nature: t.nature || 'Serious', sp: t.sp || {}};
+    const usage = +t.usage.toFixed(3);
+    if (!slow) {
+      let ts = stats(t.species, t.nature, t.sp).spe || 0;
+      if (toId(t.item) === 'choicescarf') ts = Math.floor(ts * 1.5);
+      if (topSpe > ts) out.push({id: `speed:${nm}`, kind: 'speed', usage, met: mySpe > ts, full: mySpe > ts,
+        goal: `Outspeed ${nm}: ${ts} vs your ${mySpe}` + (inWeather ? ' (in your weather)' : '')});
+    }
+    let inc = null;
+    for (const m of damaging(t.moves || [])) {
+      const r = damage(them, m, me, errors);
+      if (r && (!inc || r.max > inc[1].max)) inc = [m, r];
+    }
+    if (inc && inc[1].max > 0) {
+      const ok = inc[1].max < inc[1].defenderHp;
+      out.push({id: `survive:${nm}`, kind: 'survive', usage, met: ok, full: ok,
+        goal: `Survive ${nm}'s ${inc[0]}: takes ${pct(inc[1], 'min')}-${pct(inc[1], 'max')}%`});
+    }
+    let og = null;
+    for (const m of mine) {
+      const r = damage(me, m, them, errors);
+      if (r && (!og || r.min > og[1].min || (r.min === og[1].min && r.max > og[1].max))) og = [m, r];
+    }
+    if (og) {
+      const [m, r] = og;
+      const hp = r.defenderHp || 1;
+      const v = r.min >= hp ? 1 : r.min * 2 >= hp ? 0.5 : 0;
+      const what = v === 1 ? `OHKO ${nm}` : v === 0.5 ? `2HKO ${nm}` + (r.max >= hp ? ' (OHKO on high rolls)' : '') : `KO ${nm} (not reached)`;
+      out.push({id: `ko:${nm}`, kind: 'ko', usage, met: v > 0, full: v >= 1, goal: `${what}: ${m} ${pct(r, 'min')}-${pct(r, 'max')}%`});
+    }
+  }
+  out.sort((x, y) => y.usage - x.usage || x.kind.localeCompare(y.kind));
+  return {goals: out, met: out.filter(g => g.met).length, total_goals: out.length, warnings: [...errors].sort(), speed: mySpe};
 }
 
 export function statsRequest(b) {

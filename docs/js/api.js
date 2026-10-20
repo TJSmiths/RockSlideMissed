@@ -23,6 +23,7 @@ const ROUTES = {
   'GET /api/build/suggest': q => TB.suggestSet(q.get('species') || ''),
   'POST /api/build/stats': (q, b) => TB.statsRequest(b),
   'POST /api/build/autospread': (q, b) => TB.autoSpreadRequest(b),
+  'POST /api/build/benchmarks': (q, b) => TB.benchmarks(b),
   'POST /api/build/complete': (q, b) => TB.completeSet(b.species || '', members(b, 5), b.fixed || {}),
   'POST /api/build/coverage': (q, b) => TB.analyse(members(b, 6)),
   'POST /api/build/teammates': (q, b) => ({teammates: TB.teammateFit(members(b, 5))}),
