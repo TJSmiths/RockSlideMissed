@@ -1,0 +1,14 @@
+{
+  "name": "champions-teambuilder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pokemon Champions teambuilder (VGC and singles): usual sets, coverage, auto spreads, team finder. Static site; data encrypted.",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "node serve.mjs"
+  },
+  "devDependencies": {
+    "@smogon/calc": "0.12.0",
+    "esbuild": "0.24.0"
+  }
+}

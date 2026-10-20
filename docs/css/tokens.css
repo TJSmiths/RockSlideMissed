@@ -1,0 +1,87 @@
+/* Design tokens: every colour, spacing and type size of the UI lives here.
+   Redesigning the look should start (and often end) in this file. */
+:root {
+  /* surfaces (dark theme by default) */
+  --bg: #12151b;
+  --surface: #1b2029;
+  --surface-2: #232a35;
+  --border: #323b49;
+  --text: #e6e9ef;
+  --text-dim: #9aa4b2;
+  --accent: #6ea8fe;
+  --accent-text: #0b1220;
+  --focus: #ffd166;
+
+  /* status colours */
+  --good: #4cc38a;
+  --ok: #d9b44a;
+  --bad: #e5604d;
+  --info: #6ea8fe;
+
+  /* rating chips */
+  --rating-excellent: #2fa86f;
+  --rating-good: #6cbf5a;
+  --rating-acceptable: #c9a83b;
+  --rating-questionable: #d9822b;
+  --rating-poor: #d1493c;
+  --rating-none: #556070;
+
+  /* decision-type chips */
+  --dtype-dominant: #4a7bd1;
+  --dtype-guess: #9a62d6;
+  --dtype-positional: #3e9ea6;
+
+  /* HP bars */
+  --hp-high: #3fbf73;
+  --hp-mid: #e0b33e;
+  --hp-low: #e0553e;
+  --hp-track: #2c3442;
+
+  /* Pokemon type chips */
+  --type-normal: #9fa19f; --type-fire: #e62829; --type-water: #2980ef; --type-electric: #fac000;
+  --type-grass: #3fa129; --type-ice: #3dcef3; --type-fighting: #ff8000; --type-poison: #9141cb;
+  --type-ground: #915121; --type-flying: #81b9ef; --type-psychic: #ef4179; --type-bug: #91a119;
+  --type-rock: #afa981; --type-ghost: #704170; --type-dragon: #5060e1; --type-dark: #624d4e;
+  --type-steel: #60a1b8; --type-fairy: #ef70ef;
+  --type-text: #ffffff;
+
+  /* spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --radius: 8px;
+  --radius-small: 4px;
+
+  /* type sizes: all scale with --scale (A- / A+ in the header) */
+  --scale: 1;
+  --font: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: Consolas, "Cascadia Mono", ui-monospace, monospace;
+  --text-xs: calc(12px * var(--scale));
+  --text-sm: calc(14px * var(--scale));
+  --text-md: calc(16px * var(--scale));
+  --text-lg: calc(19px * var(--scale));
+  --text-xl: calc(23px * var(--scale));
+  --chip-dark-text: #10141a; /* text on the light chip colours */
+
+  /* layout */
+  --narrow: 900px; /* below this the panels stack (see app.css media query) */
+  --hp-bar-height: 8px;
+}
+
+/* Light theme (header: Theme). */
+:root[data-theme="light"] {
+  --bg: #f4f6f9; --surface: #ffffff; --surface-2: #eef1f5; --border: #c5ccd6;
+  --text: #11161d; --text-dim: #4a5563; --accent: #1d5fd1; --accent-text: #ffffff; --focus: #b35c00;
+  --good: #1d7a47; --ok: #8a6a00; --bad: #b3261e; --info: #1d5fd1;
+  --hp-track: #d6dce4;
+}
+/* High contrast: pure colours, strong borders. */
+:root[data-theme="contrast"] {
+  --bg: #000000; --surface: #000000; --surface-2: #121212; --border: #ffffff;
+  --text: #ffffff; --text-dim: #e0e0e0; --accent: #ffd400; --accent-text: #000000; --focus: #00e5ff;
+  --good: #3dff8a; --ok: #ffd400; --bad: #ff5c5c; --info: #7cc4ff;
+  --rating-excellent: #00c46a; --rating-good: #7ee26c; --rating-acceptable: #ffd400;
+  --rating-questionable: #ff9a3d; --rating-poor: #ff4d4d; --hp-track: #444444;
+}
