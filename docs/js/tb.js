@@ -27,6 +27,14 @@ export function setData(dex, data, key) {
 const species = id => D.species[toId(id)] || null;
 const move = id => D.moves[toId(id)] || null;
 const item = id => D.items[toId(id)] || null;
+// A set's Pokemon counts as sid: the same species or its Mega Evolution (other formes, e.g.
+// Indeedee and Indeedee-F, are different Pokemon with their own moves).
+const sameSpecies = (x, sid) => {
+  x = toId(x); sid = toId(sid);
+  if (x === sid) return true;
+  const s = species(x);
+  return !!(s && s.isMega && s.baseSpecies === sid);
+};
 const megaForme = (base, stone) => (stone ? D._mega[`${toId(base)}|${toId(stone)}`] || null : null);
 export const abilityName = id => (id ? (D.abilities[toId(id)] || {}).name || id : '');
 const speciesName = x => (species(x) || {}).name || x;
@@ -93,7 +101,7 @@ function commonSets(name) {
   if (F._suggest[sid]) return F._suggest[sid];
   const key = `common:${sid}`;
   if (CACHE[key]) return CACHE[key];
-  const sets = F.finder.filter(t => !t.partial).flatMap(t => t.sets).filter(s => toId(s.species).startsWith(sid));
+  const sets = F.finder.filter(t => !t.partial).flatMap(t => t.sets).filter(s => sameSpecies(s.species, sid));
   const n = sets.length;
   const share = list => {
     const c = new Map();
@@ -262,7 +270,7 @@ function usageWithMoves(name, moves) {
   const c = new Map();
   let n = 0;
   for (const [k, list] of Object.entries(F.itemsets)) {
-    if (!k.startsWith(sid)) continue;
+    if (!sameSpecies(k, sid)) continue;
     for (const [it, mvs] of list) {
       n += 1;
       const shared = mvs.filter(m => mine.has(m)).length;
@@ -846,7 +854,7 @@ export function statsRequest(b) {
 // --------------------------------------------------------------------------- team finder (teamsearch.py)
 const match = (team, wanted) => {
   const ids = team.map(toId);
-  return wanted.every(w => ids.some(t => t === w || t.startsWith(w)));
+  return wanted.every(w => ids.some(t => sameSpecies(t, w)));
 };
 const member = st => {
   const d = species(st.species) || {};
@@ -873,7 +881,7 @@ export function search({species: sp = [], source = 'all', limit = 40, moves = []
   const keep = t => {
     if (!match(t.sets.map(s => s.species), wanted)) return false;
     if (mv.length) {
-      const have = new Set(t.sets.filter(s => !on.length || on.some(w => toId(s.species).startsWith(w))).flatMap(s => (s.moves || []).map(toId)));
+      const have = new Set(t.sets.filter(s => !on.length || on.some(w => sameSpecies(s.species, w))).flatMap(s => (s.moves || []).map(toId)));
       if (!mv.every(m => have.has(m))) return false;
     }
     if (it.length) {
