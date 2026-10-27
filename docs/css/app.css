@@ -354,3 +354,56 @@ input[type=number] { background: var(--surface-2); color: var(--text); border: 1
 .tablewrap { overflow-x: auto; }
 .warn li { color: var(--bad, inherit); }
 .warnline { color: var(--bad); }
+
+/* readable battle review (report.py): score card, turn cards, win-chance chart */
+.report .scorecard { display: flex; gap: var(--space-4); align-items: center; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3) var(--space-4); margin: var(--space-3) 0; }
+.report .scorenum span { font-size: 44px; font-weight: 700; line-height: 1; }
+.report .scorenum small { color: var(--text-dim); font-size: var(--text-sm); margin-left: 2px; }
+.report .scorelabel { font-weight: 700; font-size: var(--text-lg); margin-bottom: var(--space-1); }
+.report .scorecard p { margin: 2px 0; }
+.report .scorecard .chips { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-2); }
+.report .tcards2 { display: grid; gap: var(--space-2); }
+.report .tcard2 { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3); }
+.report .tc-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.report .tc-cost { color: var(--bad); font-size: var(--text-sm); font-weight: 600; }
+.report .tc-verdict { margin: var(--space-1) 0; color: var(--text-dim); }
+.report .tcard2 dl { margin-top: var(--space-1); }
+.report .tcard2 ul { margin: var(--space-1) 0 0; padding-left: 18px; font-size: var(--text-sm); }
+.report .tcard2.compact { padding: var(--space-1) var(--space-3); }
+.report .note { color: var(--text-dim); font-size: var(--text-sm); }
+.report .wchart svg { width: 100%; height: auto; max-width: 720px; }
+.report .wchart .grid { stroke: var(--border); stroke-width: 1; }
+.report .wchart .axis { fill: var(--text-dim); font-size: 11px; }
+.report .wchart .best { fill: none; stroke: var(--text-dim); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.report .wchart .yours { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.report .wchart .dot { stroke: var(--bg); stroke-width: 1.5; }
+.report .wchart .dot.r-excellent { fill: var(--rating-excellent); } .report .wchart .dot.r-good { fill: var(--rating-good); }
+.report .wchart .dot.r-acceptable { fill: var(--rating-acceptable); } .report .wchart .dot.r-questionable { fill: var(--rating-questionable); }
+.report .wchart .dot.r-poor { fill: var(--rating-poor); }
+
+/* Plan: turn-by-turn planner */
+.pgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-3); }
+.pboard { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.pside { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-2) var(--space-3); }
+.pside h3 { margin: 0 0 var(--space-1); }
+.pmon { display: grid; grid-template-columns: 1fr 110px 40px; gap: var(--space-2); align-items: center; margin: var(--space-1) 0; }
+.pmon .chip { margin-left: var(--space-1); }
+.pchoose select { width: 100%; }
+.plog ul { margin: var(--space-1) 0; padding-left: 18px; }
+.plog li { margin: 1px 0; }
+.padvice { margin-top: var(--space-3); }
+.padvice .linkbtn { margin-left: var(--space-2); }
+.pend { font-size: var(--text-lg); font-weight: 700; }
+.psetup textarea { width: 100%; }
+@media (max-width: 640px) { .pboard { grid-template-columns: 1fr; } }
+
+/* My teams: picker and save box (Build, Plan, Teams) */
+.savebox { display: inline-flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+.savebox input { width: 14em; }
+.myteampick select { max-width: 28em; }
+
+/* Build: type coverage */
+.typetable td:first-child { white-space: nowrap; }
+.typetable tr.tdanger td { background: color-mix(in srgb, var(--bad) 14%, transparent); }

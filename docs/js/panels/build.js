@@ -4,6 +4,7 @@
 // browser (localStorage) between visits; nothing is sent anywhere else.
 import {api, apiFormat} from '../api.js';
 import {clear, el, typeChip} from '../util.js';
+import {deleteMyTeam, myTeamPicker, myTeams, refreshMyTeams, saveTeamBox} from '../myteams.js';
 
 const NATURES = ['Adamant', 'Bashful', 'Bold', 'Brave', 'Calm', 'Careful', 'Docile', 'Gentle', 'Hardy', 'Hasty',
   'Impish', 'Jolly', 'Lax', 'Lonely', 'Mild', 'Modest', 'Naive', 'Naughty', 'Quiet', 'Quirky', 'Rash', 'Relaxed',
@@ -161,7 +162,7 @@ async function importText(text) {
   });
   message = r.data.problems && r.data.problems.length ? r.data.problems.join('; ') : `Imported ${sets.length} Pokemon.`;
   save();
-  await Promise.all(team.map((_, i) => refreshStats(i)));
+  await Promise.all([...team.map((_, i) => refreshStats(i)), refreshCoverage()]);
   render();
 }
 
@@ -231,7 +232,7 @@ function slotCard(m, i) {
   const item = typeahead(el('input', {type: 'text', placeholder: 'Item', value: m.item,
     onchange: async e => { set('item', e.target.value); m.fixed = {...(m.fixed || {}), item: e.target.value}; save(); await Promise.all([refreshStats(i), refreshCoverage()]); render(); }}), `items-${i}`);
   const abilities = s && s.abilities_possible ? s.abilities_possible : [];
-  const ability = el('select', {onchange: async e => { set('ability', e.target.value); m.fixed = {...(m.fixed || {}), ability: e.target.value}; save(); await refreshStats(i); render(); }},
+  const ability = el('select', {onchange: async e => { set('ability', e.target.value); m.fixed = {...(m.fixed || {}), ability: e.target.value}; save(); await Promise.all([refreshStats(i), refreshCoverage()]); render(); }},
     ...[...new Set([m.ability, ...abilities].filter(Boolean))].map(a => el('option', {value: a, text: a, selected: a === m.ability})));
   const nature = el('select', {onchange: async e => { set('nature', e.target.value); m.fixed = {...(m.fixed || {}), nature: e.target.value}; save(); await refreshStats(i); render(); }},
     ...NATURES.map(n => el('option', {value: n, text: n, selected: n === m.nature})));
@@ -303,6 +304,31 @@ function slotCard(m, i) {
 
 // Per threat: the team's best hit on it (who, which move), who takes its best hit
 // well (half HP or less) and who it OHKOs; then tools and warnings.
+// Per type: who hits it super-effectively (and with what), who is weak to it, who resists or
+// is immune (battle forme typing and abilities such as Levitate, Thick Fat, -ate moves).
+function typePanel() {
+  const t = coverage && coverage.types;
+  if (!t || !t.members) return el('p', {class: 'small dim', text: 'Add Pokemon and moves to see which types you hit and resist.'});
+  const names = xs => xs.join(', ');
+  const rows = t.rows.map(r => {
+    const def = r.resist.length + r.immune.length;
+    const danger = r.weak.length >= 2 && r.weak.length > def;
+    return el('tr', {class: danger ? 'tdanger' : ''},
+      el('td', {}, typeChip(r.type)),
+      el('td', {class: r.hits.length ? 'met' : 'unmet', text: r.hits.length ? names(r.hits) : 'nothing'}),
+      el('td', {class: r.weak.length ? 'unmet' : 'dim', text: r.weak.length ? names(r.weak) : '-'}),
+      el('td', {class: def ? 'met' : 'dim', text: def ? names([...r.resist, ...r.immune.map(n => `${n} (immune)`)]) : '-'}));
+  });
+  const notes = [];
+  if (t.no_super_effective.length) notes.push(`Nothing hits super-effectively: ${t.no_super_effective.join(', ')}.`);
+  if (t.shared_weaknesses.length) notes.push(`Shared weaknesses (more of your Pokemon weak than resisting): ${t.shared_weaknesses.join(', ')}.`);
+  return el('div', {class: 'typecov'},
+    notes.length ? el('ul', {class: 'small warn'}, ...notes.map(x => el('li', {text: x}))) : el('p', {class: 'small', text: 'Every type is hit super-effectively by something, and no type hits most of your team super-effectively.'}),
+    el('div', {class: 'tablewrap'}, el('table', {class: 'small covtable typetable'},
+      el('thead', {}, el('tr', {}, ...['Type', 'You hit it super-effectively with', 'Weak to it', 'Resist / immune'].map(h => el('th', {text: h})))),
+      el('tbody', {}, ...rows))));
+}
+
 function coveragePanel() {
   const c = coverage;
   if (!c) return el('p', {class: 'small dim', text: 'Add Pokemon to see how the team handles the most used threats.'});
@@ -353,8 +379,20 @@ function render() {
     datalist('build-species', (speciesList || []).map(x => ({name: x}))),
     el('p', {class: 'small dim', text: 'Suggestions come from Reg M-C tournament teams, open sheets of 1300+ ladder games and 1760+ ladder statistics. Auto spread meets as many usage-weighted benchmarks as it can against the 12 most used threats (outspeed, survive their strongest hit, KO or 2HKO).'}),
     el('div', {class: 'bcards'}, ...team.map(slotCard)),
+    el('h3', {text: 'Type coverage'}), typePanel(),
     el('h3', {text: 'Team coverage vs the top threats'}), coveragePanel(),
     el('h3', {text: 'Teammates'}), matesBlock,
+    el('h3', {text: 'My teams'}),
+    el('div', {class: 'actions'},
+      myTeamPicker('Load', text => importText(text), name => { message = `Deleted "${name}".`; render(); }),
+      saveTeamBox(() => (species.length ? exportText() : ''), '', msg => { message = msg; render(); })),
+    myTeams().length ? el('details', {class: 'small'}, el('summary', {text: 'Manage my teams'}),
+      el('ul', {class: 'list'}, ...myTeams().map(t => el('li', {},
+        el('strong', {text: t.name}), el('span', {class: 'dim', text: ` ${t.pokemon.join(', ')}`}),
+        el('button', {class: 'linkbtn', text: 'delete', onclick: async () => {
+          if (!confirm(`Delete "${t.name}" from your teams?`)) return;
+          await deleteMyTeam(t.name); message = `Deleted "${t.name}".`; render();
+        }}))))) : null,
     el('h3', {text: 'Import / export'}),
     out,
     el('div', {class: 'actions'},
@@ -378,6 +416,7 @@ export async function renderBuild(el_) {
     const r = await api.get('/api/build/species');
     speciesList = r.ok ? r.data.species : [];
   }
+  await refreshMyTeams();
   await Promise.all(team.map(async (m, i) => { if (m.species) { await suggestions(m.species); await refreshStats(i); } }));
   await refreshCoverage();
   render();

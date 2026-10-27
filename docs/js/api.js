@@ -35,7 +35,32 @@ const ROUTES = {
   'GET /api/teams/names': () => TB.names(),
   'GET /api/teams/export': q => TB.exportTeam(q.get('id') || ''),
   'GET /api/teams/sets': q => TB.teamSets(q.get('species') || ''),
+  'GET /api/myteams': () => ({teams: myTeams().sort((a, b) => b.saved - a.saved).map(t => ({...t,
+    pokemon: t.text.replace(/\r/g, '').split('\n\n').filter(x => x.trim()).map(x => x.split('\n')[0].split(' @ ')[0].trim())}))}),
+  'POST /api/myteams': (q, b) => {
+    const name = String(b.name || '').trim().slice(0, 60), text = String(b.text || '').trim();
+    if (!name || !text) return {error: 'a team needs a name and its Showdown text'};
+    const teams = myTeams().filter(t => t.name.toLowerCase() !== name.toLowerCase());
+    teams.push({name, text: text + '\n', saved: Date.now() / 1000});
+    storeMyTeams(teams.slice(-200));
+    return {name, saved: true};
+  },
+  'POST /api/myteams/delete': (q, b) => {
+    const before = myTeams();
+    const after = before.filter(t => t.name.toLowerCase() !== String(b.name || '').trim().toLowerCase());
+    storeMyTeams(after);
+    return {deleted: before.length - after.length};
+  },
 };
+
+// Your saved teams on the website: kept in this browser (VGC and singles apart).
+const myTeamsKey = () => `tb-my-teams-${apiFormat.value}`;
+function myTeams() {
+  try { const t = JSON.parse(localStorage.getItem(myTeamsKey())); return Array.isArray(t) ? t : []; } catch (e) { return []; }
+}
+function storeMyTeams(teams) {
+  try { localStorage.setItem(myTeamsKey(), JSON.stringify(teams)); } catch (e) { /* private window: not kept */ }
+}
 
 async function call(method, path, body) {
   const url = new URL(path, 'http://local');

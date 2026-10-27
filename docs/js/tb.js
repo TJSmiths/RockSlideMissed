@@ -392,7 +392,63 @@ export function analyse(team, th = null) {
       by: who != null ? slots[who][0] : null, move: mv ? moveName(mv) : null, checks, weak,
       offence: +ov.toFixed(3), defence: +dv.toFixed(3)});
   }
-  return {threats: rows, offence: +offTotal.toFixed(3), defence: +defTotal.toFixed(3), tools: tools(team), warnings: warnings(rows, team)};
+  return {threats: rows, offence: +offTotal.toFixed(3), defence: +defTotal.toFixed(3), tools: tools(team), warnings: warnings(rows, team),
+    types: typeCoverage(team)};
+}
+
+// --------------------------------------------------------------------------- type coverage (coverage.type_coverage)
+const TYPES = ['Normal', 'Fire', 'Water', 'Electric', 'Grass', 'Ice', 'Fighting', 'Poison', 'Ground', 'Flying', 'Psychic',
+  'Bug', 'Rock', 'Ghost', 'Dragon', 'Dark', 'Steel', 'Fairy'];
+const ABILITY_TAKEN = {levitate: {Ground: 0}, eartheater: {Ground: 0}, flashfire: {Fire: 0}, wellbakedbody: {Fire: 0},
+  waterabsorb: {Water: 0}, stormdrain: {Water: 0}, dryskin: {Water: 0, Fire: 1.25}, voltabsorb: {Electric: 0},
+  lightningrod: {Electric: 0}, motordrive: {Electric: 0}, sapsipper: {Grass: 0}, thickfat: {Fire: 0.5, Ice: 0.5},
+  heatproof: {Fire: 0.5}, waterbubble: {Fire: 0.5}, purifyingsalt: {Ghost: 0.5}, fluffy: {Fire: 2}};
+
+function effectiveness(attack, defendTypes) {
+  let m = 1;
+  for (const t of defendTypes) m *= ({0: 1, 1: 2, 2: 0.5, 3: 0})[(D.typechart[toId(t)] || {})[attack] || 0] ?? 1;
+  return m;
+}
+
+// Per type: who hits it super-effectively (and with what), who is weak, who resists or is immune
+// (battle forme typing and abilities such as Levitate or Thick Fat; -ate abilities change Normal moves).
+function typeCoverage(team) {
+  const members = [];
+  for (const slot of team) {
+    if (!slot.species) continue;
+    const formId = megaForme(slot.species, slot.item) || toId(slot.species);
+    const form = species(formId);
+    if (!form) continue;
+    let ability = toId(slot.ability);
+    if (form.isMega && form.abilities) ability = form.abilities[0];
+    const moves = [];
+    for (const m of slot.moves || []) {
+      const mv = move(m) || {};
+      if (!['Physical', 'Special'].includes(mv.category) || !(mv.basePower > 0)) continue;
+      let mtype = mv.type || 'Normal';
+      if (mtype === 'Normal' && ATE[ability]) mtype = ATE[ability];
+      moves.push([mv.name || m, mtype]);
+    }
+    members.push({name: form.name || slot.species, types: form.types || [], ability, moves});
+  }
+  const rows = TYPES.map(t => {
+    const hits = [];
+    for (const m of members) {
+      const se = m.moves.filter(([, mt]) => effectiveness(mt, [t]) > 1).map(([n]) => n);
+      if (se.length) hits.push(`${m.name} (${se.join(', ')})`);
+    }
+    const weak = [], resist = [], immune = [];
+    for (const m of members) {
+      const mult = effectiveness(t, m.types) * ((ABILITY_TAKEN[m.ability] || {})[t] ?? 1);
+      if (mult === 0) immune.push(m.name);
+      else if (mult > 1) weak.push(m.name + (mult >= 4 ? ' (4x)' : ''));
+      else if (mult < 1) resist.push(m.name + (mult <= 0.25 ? ' (4x)' : ''));
+    }
+    return {type: t, hits, weak, resist, immune};
+  });
+  return {rows, members: members.length,
+    no_super_effective: members.some(m => m.moves.length) ? rows.filter(r => !r.hits.length).map(r => r.type) : [],
+    shared_weaknesses: rows.filter(r => r.weak.length >= 2 && r.weak.length > r.resist.length + r.immune.length).map(r => r.type)};
 }
 
 const SPEED_CONTROL = new Set(['tailwind', 'trickroom', 'icywind', 'electroweb', 'thunderwave', 'scaryface', 'bulldoze', 'rocktomb']);
