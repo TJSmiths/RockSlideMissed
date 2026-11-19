@@ -3,7 +3,7 @@
 // major threats, import / export / legality check. The draft is kept in this
 // browser (localStorage) between visits; nothing is sent anywhere else.
 import {api, apiFormat} from '../api.js';
-import {clear, el, typeChip} from '../util.js';
+import {clear, el, pokeIcon, typeChip} from '../util.js';
 import {myTeamPicker, refreshMyTeams, saveTeamBox} from '../myteams.js';
 
 const NATURES = ['Adamant', 'Bashful', 'Bold', 'Brave', 'Calm', 'Careful', 'Docile', 'Gentle', 'Hardy', 'Hasty',
@@ -183,37 +183,16 @@ function moveOptions(s) {
   return [...used, ...(s.learnset || []).filter(x => !seen.has(x))];
 }
 
-function datalist(id, items) {
-  return el('datalist', {id}, ...items.map(x => el('option', {value: x.name || x, label: x.share != null ? `${Math.round(100 * x.share)}%` : ''})));
-}
-
-// Usage of this Pokemon on real teams: how often, how those teams did, and its
-// items / abilities / natures / moves / partners with bars.
-function usageBlock(s) {
-  if (!s || !s.n) return null;
-  const pct = x => `${Math.round(100 * x)}%`;
-  const list = (title, items, key = 'name') => el('div', {},
-    el('strong', {class: 'small', text: title}),
-    el('ul', {}, ...items.map(x => {
-      const bar = el('span');
-      bar.style.width = `${Math.round(100 * Math.min(1, x.share))}%`;  // DOM, not inline styles (CSP)
-      return el('li', {}, el('span', {text: x[key]}), el('span', {class: 'dim', text: pct(x.share)}), el('div', {class: 'ubar'}, bar));
-    })));
-  const u = s.usage || {};
-  return el('details', {class: 'usage'},
-    el('summary', {text: `Usage: on ${pct(u.share || 0)} of teams (${u.teams || 0}), those teams won ${u.win_rate != null ? pct(u.win_rate) : '?'} · ${s.n} sets`}),
-    el('div', {class: 'ugrid'},
-      list('Items', s.items || []), list('Abilities', s.abilities || []), list('Natures', s.natures || []),
-      list('Moves', s.moves || []),
-      s.partners && s.partners.length ? list('Usual partners', s.partners.map(p => ({...p, name: p.species})), 'name') : null));
-}
-
 // Suggestions from a datalist only once 3 characters are typed.
 function typeahead(input, listId) {
   const sync = () => { if (input.value.trim().length >= 3) input.setAttribute('list', listId); else input.removeAttribute('list'); };
   input.addEventListener('input', sync);
   sync();
   return input;
+}
+
+function datalist(id, items) {
+  return el('datalist', {id}, ...items.map(x => el('option', {value: x.name || x, label: x.share != null ? `${Math.round(100 * x.share)}%` : ''})));
 }
 
 function field(label, control) {
@@ -237,6 +216,7 @@ function rosterCard(m, i) {
     onclick: () => { sel = i; render(); }},
     el('div', {class: 'rcard-top'},
       el('strong', {text: st.form || m.species}),
+      pokeIcon(st.form || m.species, 'ricon'),
       el('span', {class: 'small dim' + (tot > 66 ? ' over' : ''), text: `${tot}/66`})),
     m.item ? el('div', {class: 'small dim', text: `@ ${m.item}`}) : null,
     el('div', {class: 'small dim', text: `${m.nature} · ${spread}`}),
@@ -253,9 +233,16 @@ function editorPane(i) {
     onchange: e => pickSpecies(i, e.target.value.trim())}),
   'build-species');
   if (!m.species) {
-    return el('div', {class: 'bcard empty editor'},
-      el('div', {class: 'bcard-empty'}, el('span', {class: 'plus', 'aria-hidden': 'true', text: '+'}),
-        el('span', {class: 'dim', text: `Add a Pokemon (slot ${i + 1})`}), species));
+    const onTeam = new Set(team.map(x => x.species).filter(Boolean));
+    const picks = (speciesList || []).filter(x => !onTeam.has(x)).slice(0, 12);
+    return el('div', {},
+      el('div', {class: 'bcard empty editor'},
+        el('div', {class: 'bcard-empty'}, el('span', {class: 'plus', 'aria-hidden': 'true', text: '+'}),
+          el('span', {class: 'dim', text: `Add a Pokemon (slot ${i + 1})`}), species)),
+      picks.length ? el('div', {class: 'acard suggestcard'},
+        el('h3', {text: 'Suggestions · most used right now'}),
+        el('div', {class: 'pickrow'}, ...picks.map(p => el('button', {class: 'pick',
+          title: `add ${p} to slot ${i + 1}`, onclick: () => pickSpecies(i, p)}, p)))) : null);
   }
   const st = stats[i] || {};
   const set = (k, v) => { m[k] = v; save(); };
@@ -310,6 +297,7 @@ function editorPane(i) {
   return el('div', {class: 'bcard editor', 'data-slot': String(i)},
     el('div', {class: 'bcard-head'},
       el('div', {class: 'bcard-title'},
+        pokeIcon(st.form || m.species, 'ricon big'),
         el('strong', {text: st.form || m.species}),
         el('div', {class: 'types'}, ...(st.types || []).map(typeChip)),
         el('span', {class: 'small dim', text: m.item ? `@ ${m.item}` : 'no item'})),
@@ -328,7 +316,7 @@ function editorPane(i) {
       spTable,
       el('div', {class: 'actions'}, el('button', {class: 'btn', text: autoRes[i] ? 'Re-run auto spread' : 'Auto spread vs threats',
         onclick: () => autoSpread(i)}), balance),
-      spreads, goals, usageBlock(s)),
+      spreads, goals),
     datalist(`items-${i}`, s && s.items ? s.items : []),
     datalist(`moves-${i}`, moveOptions(s)));
 }
