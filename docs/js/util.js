@@ -25,19 +25,27 @@ export const typeChip = t => el('span', {class: `chip t-${String(t).toLowerCase(
 
 // Pokemon icon (Showdown's dex sprites, named after the display name: "Salamence-Mega"
 // -> salamence-mega.png). Falls back through the compressed forme (urshifu-rapidstrike)
-// and the base species, then disappears; nothing breaks on an unknown name.
+// and the base species; if every candidate misses, a neutral pokeball placeholder keeps
+// the layout (so a missing icon is always visible and diagnosable).
+const POKEBALL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%23e8514d' stroke='%23222' stroke-width='2'/%3E%3Crect x='1' y='10.5' width='22' height='3' fill='%23222'/%3E%3Ccircle cx='12' cy='12' r='4' fill='%23f4f5f7' stroke='%23222' stroke-width='2'/%3E%3C/svg%3E";
+
 export function pokeIcon(name, cls = 'picon') {
   const slug = String(name || '').toLowerCase().replace(/♀/g, '-f').replace(/♂/g, '-m').replace(/\s+/g, '-');
   const parts = slug.split('-');
   const c2 = parts.length > 2 ? `${parts[0]}-${parts.slice(1).join('')}` : slug;
   const url = step => `https://play.pokemonshowdown.com/sprites/dex/${[slug, c2, parts[0]][step]}.png`;
   const img = el('img', {class: cls, src: url(0), alt: '', loading: 'lazy'});
-  img.addEventListener('error', () => {
+  const onError = () => {
     const step = Number(img.dataset.step || '0') + 1;
-    if (step > 2) { img.remove(); return; }
+    if (step > 2) {  // every candidate 404'd: a pokeball instead of a blank gap
+      img.removeEventListener('error', onError);
+      img.src = POKEBALL;
+      return;
+    }
     img.dataset.step = String(step);
     img.src = url(step);
-  });
+  };
+  img.addEventListener('error', onError);
   return img;
 }
 

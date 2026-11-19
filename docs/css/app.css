@@ -169,7 +169,8 @@ table.lines td.num { text-align: right; white-space: nowrap; font-family: var(--
 .teams-grid textarea { width: 100%; box-sizing: border-box; }
 .setcard { border: 1px solid var(--border); border-radius: var(--radius-small); padding: var(--space-2); margin-bottom: var(--space-2); }
 select { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-small); padding: var(--space-2); }
-select option { background: var(--surface); color: var(--text); }
+select { background: var(--surface-solid); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-small); padding: var(--space-2); }
+select option { background: var(--surface-solid); color: var(--text); }
 .teambar input[type=text] { width: auto; }
 .mon .speed { font-size: var(--text-sm); margin-top: var(--space-1); }
 .preds { margin: var(--space-2) 0; }
