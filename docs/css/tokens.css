@@ -1,30 +1,41 @@
 /* Design tokens: every colour, spacing and type size of the UI lives here.
    Redesigning the look should start (and often end) in this file. */
 :root {
-  /* surfaces (dark theme by default) */
-  --bg: #12151b;
-  --surface: #1b2029;
-  --surface-2: #232a35;
-  --border: #323b49;
-  --text: #e6e9ef;
-  --text-dim: #9aa4b2;
-  --accent: #6ea8fe;
-  --accent-text: #0b1220;
-  --focus: #ffd166;
+  /* surfaces: deep dark with translucent glass panels (pro-tool style) */
+  --bg: #08090c;
+  --surface: rgba(255, 255, 255, 0.028);
+  --surface-2: rgba(255, 255, 255, 0.055);
+  --border: rgba(255, 255, 255, 0.07);
+  --text: #f4f5f7;
+  --text-dim: #a9b0ba;
+  --accent: #7c82f4;
+  --accent-2: #a78bfa;
+  --accent-text: #ffffff;
+  --focus: #a78bfa;
+
+  /* glass, glow and the ambient background fields */
+  --glass-blur: 18px;
+  --chrome-bg: rgba(10, 11, 16, 0.6);
+  --panel-glow: 0 24px 60px rgba(0, 0, 0, 0.38);
+  --panel-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --accent-glow: 0 4px 18px rgba(99, 102, 241, 0.35);
+  --ambient-a: radial-gradient(circle, rgba(99, 102, 241, 0.14), transparent 65%);
+  --ambient-b: radial-gradient(circle, rgba(34, 211, 238, 0.08), transparent 65%);
 
   /* status colours */
-  --good: #4cc38a;
-  --ok: #d9b44a;
-  --bad: #e5604d;
-  --info: #6ea8fe;
+  --good: #34d399;
+  --ok: #fbbf24;
+  --bad: #fb7185;
+  --info: #818cf8;
 
   /* rating chips */
-  --rating-excellent: #2fa86f;
-  --rating-good: #6cbf5a;
+  --rating-excellent: #22a06b;
+  --rating-good: #4cb960;
   --rating-acceptable: #c9a83b;
   --rating-questionable: #d9822b;
   --rating-poor: #d1493c;
-  --rating-none: #556070;
+  --rating-none: #454c59;
 
   /* decision-type chips */
   --dtype-dominant: #4a7bd1;
@@ -32,10 +43,10 @@
   --dtype-positional: #3e9ea6;
 
   /* HP bars */
-  --hp-high: #3fbf73;
-  --hp-mid: #e0b33e;
-  --hp-low: #e0553e;
-  --hp-track: #2c3442;
+  --hp-high: #34d399;
+  --hp-mid: #fbbf24;
+  --hp-low: #fb7185;
+  --hp-track: rgba(255, 255, 255, 0.07);
 
   /* Pokemon type chips */
   --type-normal: #9fa19f; --type-fire: #e62829; --type-water: #2980ef; --type-electric: #fac000;
@@ -51,12 +62,12 @@
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
-  --radius: 8px;
-  --radius-small: 4px;
+  --radius: 14px;
+  --radius-small: 10px;
 
   /* type sizes: all scale with --scale (A- / A+ in the header) */
   --scale: 1;
-  --font: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   --font-mono: Consolas, "Cascadia Mono", ui-monospace, monospace;
   --text-xs: calc(12px * var(--scale));
   --text-sm: calc(14px * var(--scale));
@@ -67,21 +78,27 @@
 
   /* layout */
   --narrow: 900px; /* below this the panels stack (see app.css media query) */
-  --hp-bar-height: 8px;
+  --hp-bar-height: 5px;
 }
 
 /* Light theme (header: Theme). */
 :root[data-theme="light"] {
-  --bg: #f4f6f9; --surface: #ffffff; --surface-2: #eef1f5; --border: #c5ccd6;
-  --text: #11161d; --text-dim: #4a5563; --accent: #1d5fd1; --accent-text: #ffffff; --focus: #b35c00;
-  --good: #1d7a47; --ok: #8a6a00; --bad: #b3261e; --info: #1d5fd1;
-  --hp-track: #d6dce4;
+  --bg: #f4f6f9; --surface: #ffffff; --surface-2: #eef1f5; --border: #d5dbe4;
+  --text: #11161d; --text-dim: #4a5563; --accent: #4f46e5; --accent-2: #7c3aed; --accent-text: #ffffff; --focus: #7c3aed;
+  --chrome-bg: rgba(255, 255, 255, 0.75);
+  --accent-gradient: linear-gradient(135deg, #4f46e5, #7c3aed);
+  --good: #1d7a47; --ok: #8a6a00; --bad: #b3261e; --info: #4f46e5;
+  --hp-track: #dde3ea;
+  --panel-glow: 0 16px 40px rgba(22, 30, 46, 0.10);
 }
 /* High contrast: pure colours, strong borders. */
 :root[data-theme="contrast"] {
   --bg: #000000; --surface: #000000; --surface-2: #121212; --border: #ffffff;
-  --text: #ffffff; --text-dim: #e0e0e0; --accent: #ffd400; --accent-text: #000000; --focus: #00e5ff;
+  --text: #ffffff; --text-dim: #e0e0e0; --accent: #ffd400; --accent-2: #ffd400; --accent-text: #000000; --focus: #00e5ff;
+  --chrome-bg: #000000;
+  --accent-gradient: none;
   --good: #3dff8a; --ok: #ffd400; --bad: #ff5c5c; --info: #7cc4ff;
   --rating-excellent: #00c46a; --rating-good: #7ee26c; --rating-acceptable: #ffd400;
   --rating-questionable: #ff9a3d; --rating-poor: #ff4d4d; --hp-track: #444444;
 }
+
