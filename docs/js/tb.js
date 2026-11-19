@@ -917,7 +917,8 @@ const member = st => {
   return {species: d.name || st.species, item: itemName(st.item || ''), types: d.types || [], moves: (st.moves || []).map(m => moveName(m))};
 };
 function summary(t) {
-  const out = {id: t.id, source: t.source, species: t.sets.map(s => speciesName(s.species)), members: t.sets.map(member), date: t.date};
+  const cat = t.category || (t.source === 'tournament' ? 'online' : 'showdown');
+  const out = {id: t.id, source: t.source, category: cat, species: t.sets.map(s => speciesName(s.species)), members: t.sets.map(member), date: t.date};
   if (t.source === 'tournament') {
     const p = t.placement;
     Object.assign(out, {event: t.event || 'tournament', placement: p, record: t.record});
@@ -946,25 +947,32 @@ export function search({species: sp = [], source = 'all', limit = 40, moves = []
     }
     return true;
   };
+  const cat = t => t.category || (t.source === 'tournament' ? 'online' : 'showdown');
   let found = [];
-  if (source === 'all' || source === 'tournament') {
-    const ts = F.finder.filter(t => t.source === 'tournament' && keep(t));
+  if (source === 'all' || source === 'tournament' || source === 'online' || source === 'regional') {
+    const ts = F.finder.filter(t => t.source === 'tournament' && keep(t) &&
+      (source === 'all' || source === 'tournament' || cat(t) === source));
     ts.sort((a, b) => (a.placement || 999) - (b.placement || 999) || (parseInt(String(b.date || '0').slice(0, 4)) || 0) - (parseInt(String(a.date || '0').slice(0, 4)) || 0));
     found = found.concat(ts);
   }
-  if (source === 'all' || source === 'ladder') {
+  if (source === 'all' || source === 'ladder' || source === 'showdown') {
     const ls = F.finder.filter(t => t.source !== 'tournament' && keep(t));
     ls.sort((a, b) => (b.rating || 0) - (a.rating || 0));
     found = found.concat(ls);
   }
-  const tour = found.filter(t => t.source === 'tournament').length;
+  const cats = {showdown: 0, online: 0, regional: 0};
+  for (const t of found) cats[cat(t)]++;
+  const tour = cats.online + cats.regional;
   if (source === 'all') {
-    const a = found.filter(t => t.source === 'tournament'), b = found.filter(t => t.source !== 'tournament');
+    const pools = ['showdown', 'online', 'regional'].map(c => found.filter(t => cat(t) === c));
     const mixed = [];
-    for (let k = 0; k < Math.min(a.length, b.length); k++) mixed.push(a[k], b[k]);
-    found = mixed.concat(a.slice(b.length), b.slice(a.length));
+    for (let k = 0; k < Math.max(0, ...pools.map(p => p.length)); k++)
+      for (const p of pools) if (p[k]) mixed.push(p[k]);
+    found = mixed;
   }
-  return {total: found.length, tournament: tour, ladder: found.length - tour, teams: found.slice(0, limit).map(summary)};
+  return {total: found.length, tournament: tour, ladder: found.length - tour,
+    showdown: cats.showdown, online: cats.online, regional: cats.regional,
+    teams: found.slice(0, limit).map(summary)};
 }
 
 function filled(t) {

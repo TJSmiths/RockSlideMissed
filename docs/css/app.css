@@ -305,6 +305,10 @@ body { font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .rcard .rmoves { display: flex; gap: 4px; flex-wrap: wrap; }
 .rmove { font-size: 11px; padding: 1px 7px; border-radius: 5px; background: var(--surface-2); color: var(--text-dim); }
 .bcard.editor { min-width: 0; }
+/* Pokemon icons (Showdown dex sprites): sized to fit the row they sit in */
+.ricon { width: 30px; height: 30px; object-fit: contain; flex: none; margin: -5px 2px -7px 2px; }
+.ricon.big { width: 40px; height: 40px; margin: -8px 6px -12px 0; }
+.bcard-title { align-items: center; }
 /* Build: Team / Analysis / Share segments; two-column slot editor; analysis cards */
 .segments { display: inline-flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--border);
   border-radius: 999px; }

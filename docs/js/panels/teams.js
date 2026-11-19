@@ -120,7 +120,8 @@ export async function renderTeams(root, store, load, practiceWith) {
     names = r.ok ? r.data : {species: [], moves: [], items: []};
   }
   const source = el('select', {'aria-label': 'source', onchange: e => { state.source = e.target.value; }},
-    ...[['all', 'All teams'], ['tournament', 'Tournament teams'], ['ladder', 'Ladder sheets (1300+)']].map(([v, t]) =>
+    ...[['all', 'All teams'], ['showdown', 'Showdown ladder'], ['online', 'Online tournaments'],
+        ['regional', 'Regionals & championships']].map(([v, t]) =>
       el('option', {value: v, text: t, selected: state.source === v})));
   const movesOn = el('label', {class: 'small checkline'},
     el('input', {type: 'checkbox', checked: state.movesOn, onchange: e => { state.movesOn = e.target.checked; }}),

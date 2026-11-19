@@ -23,6 +23,24 @@ export function clear(node, ...children) {
 export const ratingClass = r => 'r-' + String(r || 'none').toLowerCase();
 export const typeChip = t => el('span', {class: `chip t-${String(t).toLowerCase()}`, text: t});
 
+// Pokemon icon (Showdown's dex sprites, named after the display name: "Salamence-Mega"
+// -> salamence-mega.png). Falls back through the compressed forme (urshifu-rapidstrike)
+// and the base species, then disappears; nothing breaks on an unknown name.
+export function pokeIcon(name, cls = 'picon') {
+  const slug = String(name || '').toLowerCase().replace(/♀/g, '-f').replace(/♂/g, '-m').replace(/\s+/g, '-');
+  const parts = slug.split('-');
+  const c2 = parts.length > 2 ? `${parts[0]}-${parts.slice(1).join('')}` : slug;
+  const url = step => `https://play.pokemonshowdown.com/sprites/dex/${[slug, c2, parts[0]][step]}.png`;
+  const img = el('img', {class: cls, src: url(0), alt: '', loading: 'lazy'});
+  img.addEventListener('error', () => {
+    const step = Number(img.dataset.step || '0') + 1;
+    if (step > 2) { img.remove(); return; }
+    img.dataset.step = String(step);
+    img.src = url(step);
+  });
+  return img;
+}
+
 export function hpBar(pct) {
   const cls = pct > 50 ? '' : pct > 20 ? 'mid' : 'low';
   const inner = el('span');
