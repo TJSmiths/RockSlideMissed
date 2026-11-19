@@ -3,12 +3,14 @@
 // text or load it into Build; "usual sets" for each searched Pokemon (the
 // reference for a closed team sheet).
 import {api, apiFormat} from '../api.js';
-import {clear, el, typeChip} from '../util.js';
+import {clear, el, pokeIcon, typeChip} from '../util.js';
+import {saveTeamBox} from '../myteams.js';
 
 let state = {species: [], moves: [], items: [], movesOn: false, source: 'all', results: null, picked: null, sets: []};
 let names = null;   // suggestions for the filter boxes
 let onLoad = null;  // loads a team's text into the Build tab
 let onPractice = null;  // starts Practice with a team as the bot's
+let onPlan = null;  // puts a team in the planner: onPlan('them' | 'you', text)
 
 // A filter box: type (3+ letters for suggestions), Enter or comma adds a tag.
 function tagBox(label, key, listId, placeholder, root, store) {
@@ -63,7 +65,7 @@ function badge(t) {
 function memberTile(m, highlight) {
   const moveHit = (m.moves || []).filter(x => highlight.has(x.toLowerCase()));
   return el('div', {class: `mtile${moveHit.length ? ' hit' : ''}`},
-    el('div', {class: 'mname', text: m.species}),
+    el('div', {class: 'mname'}, el('span', {text: m.species}), pokeIcon(m.species, 'micon')),
     el('div', {class: 'types'}, ...(m.types || []).map(typeChip)),
     el('div', {class: 'small dim mitem', text: m.item || '—'}),
     moveHit.length ? el('div', {class: 'small mhit', text: moveHit.join(', ')}) : null);
@@ -78,6 +80,11 @@ function teamCard(t, root, store, highlight) {
         e.stopPropagation();
         const r = await api.get(`/api/teams/export?id=${encodeURIComponent(t.id)}`);
         if (r.ok) onLoad(r.data.text);
+      }}) : null,
+      onPlan ? el('button', {class: 'iconbtn tbuild', title: 'their team on the Plan page (your team stays)', text: 'Plan against', onclick: async e => {
+        e.stopPropagation();
+        const r = await api.get(`/api/teams/export?id=${encodeURIComponent(t.id)}`);
+        if (r.ok) onPlan('them', r.data.text);
       }}) : null,
       onPractice ? el('button', {class: 'iconbtn tbuild', title: 'the bot plays this team in Practice', text: 'Practice against', onclick: async e => {
         e.stopPropagation();
@@ -108,13 +115,14 @@ function setsCard(s) {
 
 let lastFormat = null;
 
-export async function renderTeams(root, store, load, practiceWith) {
+export async function renderTeams(root, store, load, practiceWith, planWith) {
   if (lastFormat !== apiFormat.value) {  // VGC / singles switched: their own teams and suggestions
     lastFormat = apiFormat.value; names = null;
     state = {...state, results: null, picked: null, sets: []};
   }
   if (load) onLoad = load;
   if (practiceWith) onPractice = practiceWith;
+  if (planWith) onPlan = planWith;
   if (!names) {
     const r = await api.get('/api/teams/names');
     names = r.ok ? r.data : {species: [], moves: [], items: []};
@@ -168,7 +176,10 @@ export async function renderTeams(root, store, load, practiceWith) {
           catch (e) { text.select(); status.textContent = 'Press Ctrl+C.'; }
         }}),
         onLoad ? el('button', {class: 'btn secondary', text: 'Open in Build', onclick: () => onLoad(text.value)}) : null,
+        onPlan ? el('button', {class: 'btn secondary', text: 'Plan against this', title: 'their team on the Plan page (your team stays)', onclick: () => onPlan('them', text.value)}) : null,
+        onPlan ? el('button', {class: 'btn secondary', text: 'Plan with this', title: 'your team on the Plan page', onclick: () => onPlan('you', text.value)}) : null,
         onPractice ? el('button', {class: 'btn secondary', text: 'Practice against this', onclick: () => onPractice(p.label, text.value)}) : null,
+        saveTeamBox(() => text.value, p.label.slice(0, 60), msg => { status.textContent = msg; }),
         status),
       el('details', {}, el('summary', {text: 'Showdown text'}), text));
   }

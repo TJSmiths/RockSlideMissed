@@ -334,6 +334,9 @@ body { font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
   padding: 3px 12px; cursor: pointer; font-size: var(--text-xs); font-weight: 500;
   transition: border-color .16s, transform .16s cubic-bezier(.2,.7,.3,1); }
 .pick:hover { border-color: var(--accent); transform: translateY(-1px); }
+/* Teams: member tiles carry their Pokemon icon next to the name */
+.mname { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.micon { width: 30px; height: 30px; object-fit: contain; flex: none; margin: -4px -2px -8px 0; }
 .bcard.empty { border-style: dashed; background: transparent; box-shadow: none; }
 .bcard-empty { display: flex; flex-direction: column; gap: var(--space-2); align-items: stretch; padding: var(--space-4); text-align: center; }
 .bcard-empty .plus { font-size: calc(28px * var(--scale)); color: var(--text-dim); line-height: 1; }

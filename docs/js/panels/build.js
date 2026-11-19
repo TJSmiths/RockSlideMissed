@@ -22,7 +22,9 @@ const sugg = {};      // species -> suggest_set result
 const stats = {};     // slot -> computed stats
 const autoRes = {};   // slot -> auto spread report
 const bench = {};     // slot -> benchmarks of the spread as it is now (live)
-let mates = null;
+let mateSuggest = null;  // dynamic teammate suggestions for the empty-slot card
+let mateSuggestKey = '';
+let suggestBusy = false;
 const why = {};       // slot -> complete_set result (move reasons, team needs)
 let coverage = null;  // coverage.analyse of the whole team
 let message = '';
@@ -233,16 +235,44 @@ function editorPane(i) {
     onchange: e => pickSpecies(i, e.target.value.trim())}),
   'build-species');
   if (!m.species) {
-    const onTeam = new Set(team.map(x => x.species).filter(Boolean));
-    const picks = (speciesList || []).filter(x => !onTeam.has(x)).slice(0, 12);
+    const onTeamNames = team.map(x => x.species).filter(Boolean);
+    const onTeam = new Set(onTeamNames);
+    const key = onTeamNames.slice().sort().join(',');
+    if (key && mateSuggestKey !== key && !suggestBusy) {  // team changed: rank what pairs with it
+      mateSuggestKey = key;
+      suggestBusy = true;
+      api.post('/api/build/teammates', {team: team.filter(x => x.species)}).then(r => {
+        suggestBusy = false;
+        mateSuggest = r.ok ? (r.data.teammates || []) : null;
+        if (tab === 'team' && root && !root.closest('[hidden]') && !team[sel].species) render();
+      }).catch(() => { suggestBusy = false; });
+    }
+    const addCard = el('div', {class: 'bcard empty editor'},
+      el('div', {class: 'bcard-empty'}, el('span', {class: 'plus', 'aria-hidden': 'true', text: '+'}),
+        el('span', {class: 'dim', text: `Add a Pokemon (slot ${i + 1})`}), species));
+    if (!key) {  // empty team: suggest the most used species
+      const picks = (speciesList || []).filter(x => !onTeam.has(x)).slice(0, 12);
+      return el('div', {},
+        addCard,
+        picks.length ? el('div', {class: 'acard suggestcard'},
+          el('h3', {text: 'Suggestions · most used right now'}),
+          el('div', {class: 'pickrow'}, ...picks.map(p => el('button', {class: 'pick',
+            title: `add ${p} to slot ${i + 1}`, onclick: () => pickSpecies(i, p)}, p)))) : null);
+    }
+    const ranked = (mateSuggest || []).filter(t => !onTeam.has(t.species));
+    const picks = suggestBusy
+      ? [el('span', {class: 'small dim', text: 'Ranking what pairs with your team…'})]
+      : ranked.map(t => el('button', {class: 'pick', title:
+          `on ${Math.round(100 * t.share)}% of teams with yours (${t.together || '?'})` +
+          (t.win_rate != null ? ` · won ${Math.round(100 * t.win_rate)}%` : '') +
+          (t.covers && t.covers.length ? ` · hits ${t.covers.join(', ')}` : '') +
+          (t.checks && t.checks.length ? ` · takes on ${t.checks.join(', ')}` : ''),
+          onclick: () => pickSpecies(i, t.species)}, t.species));
     return el('div', {},
-      el('div', {class: 'bcard empty editor'},
-        el('div', {class: 'bcard-empty'}, el('span', {class: 'plus', 'aria-hidden': 'true', text: '+'}),
-          el('span', {class: 'dim', text: `Add a Pokemon (slot ${i + 1})`}), species)),
-      picks.length ? el('div', {class: 'acard suggestcard'},
-        el('h3', {text: 'Suggestions · most used right now'}),
-        el('div', {class: 'pickrow'}, ...picks.map(p => el('button', {class: 'pick',
-          title: `add ${p} to slot ${i + 1}`, onclick: () => pickSpecies(i, p)}, p)))) : null);
+      addCard,
+      el('div', {class: 'acard suggestcard'},
+        el('h3', {text: 'Suggestions · pairs with your team'}),
+        el('div', {class: 'pickrow'}, ...picks)));
   }
   const st = stats[i] || {};
   const set = (k, v) => { m[k] = v; save(); };
@@ -395,11 +425,10 @@ function segBtn(key, label) {
     onclick: () => { tab = key; render(); }}, label);
 }
 
-function analysisPanel(matesBlock) {
+function analysisPanel() {
   return el('div', {class: 'agrid'},
     el('div', {class: 'acard'}, el('h3', {text: 'Type coverage'}), typePanel()),
-    el('div', {class: 'acard'}, el('h3', {text: 'Team coverage vs the top threats'}), coveragePanel()),
-    el('div', {class: 'acard wide'}, el('h3', {text: 'Teammates'}), matesBlock));
+    el('div', {class: 'acard'}, el('h3', {text: 'Team coverage vs the top threats'}), coveragePanel()));
 }
 
 function sharePanel(out) {
@@ -412,27 +441,10 @@ function sharePanel(out) {
 
 function render() {
   if (!root) return;
-  const species = team.map(m => m.species).filter(Boolean);
   const out = el('textarea', {rows: 10, class: 'mono', 'aria-label': 'team text'});
   out.value = exportText();
   const status = el('span', {class: 'small dim', 'aria-live': 'polite', text: message});
-  const matesBlock = el('div', {},
-    el('div', {class: 'actions'}, el('button', {class: 'btn secondary', text: 'Suggest teammates', disabled: !species.length,
-      onclick: async () => {
-        message = 'Ranking teammates by what strong teams pair and the gaps each fills...'; render();
-        const r = await api.post('/api/build/teammates', {team: team.filter(m => m.species)});
-        mates = r.ok ? r.data.teammates : []; message = ''; render();
-      }})),
-    mates ? el('ul', {class: 'list mates'}, ...mates.map(t => el('li', {},
-      el('strong', {text: t.species}),
-      el('span', {class: 'small dim', text: ` on ${Math.round(100 * t.share)}% of teams with yours (${t.together}), those teams won ${Math.round(100 * t.win_rate)}%`}),
-      t.covers && t.covers.length ? el('span', {class: 'small', text: ` · hits ${t.covers.join(', ')}`}) : null,
-      t.checks && t.checks.length ? el('span', {class: 'small', text: ` · takes on ${t.checks.join(', ')}`}) : null,
-      el('button', {class: 'linkbtn', text: 'add', disabled: species.length >= 6, onclick: async () => {
-        const i = team.findIndex(m => !m.species); if (i < 0) return;
-        mates = null; await pickSpecies(i, t.species);
-      }})))) : null);
-  const body = tab === 'analysis' ? analysisPanel(matesBlock)
+  const body = tab === 'analysis' ? analysisPanel()
     : tab === 'share' ? sharePanel(out)
     : el('div', {class: 'team-layout'},
         el('div', {class: 'roster', role: 'list', 'aria-label': 'your team'}, ...team.map(rosterCard)),
@@ -451,7 +463,8 @@ function render() {
 export async function renderBuild(el_) {
   root = el_;
   if (apiFormat.value !== fmt) {  // switched on the Teams tab
-    fmt = apiFormat.value; team = load(); speciesList = null; mates = null; coverage = null; sel = 0;
+    fmt = apiFormat.value; team = load(); speciesList = null; coverage = null; sel = 0;
+    mateSuggest = null; mateSuggestKey = '';
     for (const o of [sugg, stats, autoRes, why]) for (const k of Object.keys(o)) delete o[k];
   }
   if (!speciesList) {
