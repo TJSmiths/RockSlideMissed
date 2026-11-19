@@ -28,6 +28,7 @@ let coverage = null;  // coverage.analyse of the whole team
 let message = '';
 let root = null;
 const openSlot = {};  // slot -> expanded: filled slots render as one line until opened
+let tab = 'team';     // 'team' | 'analysis' | 'share'
 
 function load() {
   try { const t = JSON.parse(localStorage.getItem(keyFor(fmt))); if (Array.isArray(t) && t.length === 6) return t; } catch (e) { /* none */ }
@@ -310,15 +311,19 @@ function slotCard(m, i) {
         el('button', {class: 'iconbtn', title: 'fill the usual set', 'aria-label': 'fill the usual set', text: 'Usual set', onclick: () => fillUsual(i)}),
         el('button', {class: 'iconbtn', title: 'remove', 'aria-label': 'remove', text: '✕', onclick: async () => { team[i] = empty(); autoRes[i] = null; why[i] = null; save(); await refreshCoverage(); render(); }}))),
     el('div', {class: 'bcard-body'},
-      el('div', {class: 'bgrid3'}, field('Pokemon', species), field('Item', item), field('Ability', ability), field('Nature', nature)),
-      el('div', {class: 'bsec-label blabel', text: 'Moves'}),
-      el('div', {class: 'bmoves'}, ...moves),
-      reasons, needs,
-      el('div', {class: 'bsec-label blabel' + (total > 66 ? ' over' : ''), text: `Stat points ${total}/66`}),
-      spTable,
-      el('div', {class: 'actions'}, el('button', {class: 'btn', text: autoRes[i] ? 'Re-run auto spread' : 'Auto spread vs threats',
-        onclick: () => autoSpread(i)}), balance),
-      spreads, goals, usageBlock(s)),
+      el('div', {class: 'bcols'},
+        el('div', {},
+          el('div', {class: 'bgrid3'}, field('Pokemon', species), field('Item', item), field('Ability', ability), field('Nature', nature)),
+          el('div', {class: 'bsec-label blabel', text: 'Moves'}),
+          el('div', {class: 'bmoves'}, ...moves),
+          (reasons || needs) ? el('details', {class: 'bsec', open: true},
+            el('summary', {text: 'Why these picks'}), reasons, needs) : null),
+        el('div', {},
+          el('div', {class: 'bsec-label blabel' + (total > 66 ? ' over' : ''), text: `Stat points ${total}/66`}),
+          spTable,
+          el('div', {class: 'actions'}, el('button', {class: 'btn', text: autoRes[i] ? 'Re-run auto spread' : 'Auto spread vs threats',
+            onclick: () => autoSpread(i)}), balance),
+          spreads, goals, usageBlock(s)))),
     datalist(`items-${i}`, s && s.items ? s.items : []),
     datalist(`moves-${i}`, moveOptions(s)));
 }
@@ -414,6 +419,27 @@ function actionBar(status) {
     status);
 }
 
+// Build sections: the team itself, the analysis reports, import/export.
+function segBtn(key, label) {
+  return el('button', {class: 'tabbtn', role: 'tab', 'aria-selected': String(tab === key),
+    onclick: () => { tab = key; render(); }}, label);
+}
+
+function analysisPanel(matesBlock) {
+  return el('div', {class: 'agrid'},
+    el('div', {class: 'acard'}, el('h3', {text: 'Type coverage'}), typePanel()),
+    el('div', {class: 'acard'}, el('h3', {text: 'Team coverage vs the top threats'}), coveragePanel()),
+    el('div', {class: 'acard wide'}, el('h3', {text: 'Teammates'}), matesBlock));
+}
+
+function sharePanel(out) {
+  return el('div', {class: 'sharepanel'},
+    el('p', {class: 'small dim', text: 'Suggestions come from Reg M-C tournament teams, open sheets of 1300+ ladder games and 1760+ ladder statistics. Auto spread meets as many usage-weighted benchmarks as it can against the 12 most used threats (outspeed, survive their strongest hit, KO or 2HKO).'}),
+    el('h3', {text: 'Import / export'}),
+    out,
+    el('div', {class: 'actions'}, el('button', {class: 'btn secondary', text: 'Import this text', onclick: () => importText(out.value)})));
+}
+
 function render() {
   if (!root) return;
   const species = team.map(m => m.species).filter(Boolean);
@@ -436,19 +462,18 @@ function render() {
         const i = team.findIndex(m => !m.species); if (i < 0) return;
         mates = null; await pickSpecies(i, t.species);
       }})))) : null);
+  const body = tab === 'analysis' ? analysisPanel(matesBlock)
+    : tab === 'share' ? sharePanel(out)
+    : el('div', {class: 'bcards'}, ...team.map(slotCard));
   clear(root,
     el('h2', {text: fmt === 'singles' ? 'Build: singles (BSS Reg M-C)' : 'Build: VGC (Reg M-C)'}),
     datalist('build-species', (speciesList || []).map(x => ({name: x}))),
-    el('div', {class: 'buildbar'}, teamStrip(), actionBar(status)),
-    el('p', {class: 'small dim', text: 'Suggestions come from Reg M-C tournament teams, open sheets of 1300+ ladder games and 1760+ ladder statistics. Auto spread meets as many usage-weighted benchmarks as it can against the 12 most used threats (outspeed, survive their strongest hit, KO or 2HKO).'}),
-    el('div', {class: 'bcards'}, ...team.map(slotCard)),
-    el('h3', {text: 'Type coverage'}), typePanel(),
-    el('h3', {text: 'Team coverage vs the top threats'}), coveragePanel(),
-    el('h3', {text: 'Teammates'}), matesBlock,
-    el('h3', {text: 'Import / export'}),
-    out,
-    el('div', {class: 'actions'},
-      el('button', {class: 'btn secondary', text: 'Import this text', onclick: () => importText(out.value)})));
+    el('div', {class: 'buildbar'}, teamStrip(),
+      el('div', {class: 'actionbar'},
+        el('div', {class: 'segments', role: 'tablist', 'aria-label': 'Build sections'},
+          segBtn('team', 'Team'), segBtn('analysis', 'Analysis'), segBtn('share', 'Share')),
+        actionBar(status))),
+    body);
 }
 
 export async function renderBuild(el_) {
