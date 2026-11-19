@@ -11,12 +11,6 @@ It covers:
 
 Damage calcs use [@smogon/calc](https://github.com/smogon/damage-calc) (Champions = generation 0). Game data comes from Pokemon Showdown.
 
-## Data
-
-Usage sets, spreads, threats and teams come from public sources: Smogon's monthly usage stats, public Showdown replays rated 1300+ (VGC) or 1100+ (singles), and tournament team lists from the Limitless API. Ladder teams are anonymous: no usernames, replay IDs or times. The data is refreshed and pushed by ProjectPoke's scripts/publish_web.py.
-
-This repository is only the teambuilder; the battle trainer is not part of it.
-
 ## Build
 
 ```sh
