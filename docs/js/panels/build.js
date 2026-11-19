@@ -27,8 +27,8 @@ const why = {};       // slot -> complete_set result (move reasons, team needs)
 let coverage = null;  // coverage.analyse of the whole team
 let message = '';
 let root = null;
-const openSlot = {};  // slot -> expanded: filled slots render as one line until opened
 let tab = 'team';     // 'team' | 'analysis' | 'share'
+let sel = 0;          // the slot shown in the editor pane (the roster sits on the left)
 
 function load() {
   try { const t = JSON.parse(localStorage.getItem(keyFor(fmt))); if (Array.isArray(t) && t.length === 6) return t; } catch (e) { /* none */ }
@@ -75,8 +75,8 @@ async function fillUsual(i) {
 async function pickSpecies(i, species) {
   team[i] = {...empty(), species};
   autoRes[i] = null; why[i] = null;
-  if (!species) { delete openSlot[i]; save(); await refreshCoverage(); return render(); }
-  openSlot[i] = true;  // picking a Pokemon opens the slot for editing
+  if (!species) { save(); await refreshCoverage(); return render(); }
+  sel = i;  // picking a Pokemon selects its slot in the editor pane
   await completeSlot(i);
 }
 
@@ -163,7 +163,7 @@ async function importText(text) {
     return {species: s.species, item: s.item || '', ability: s.ability || '', nature: s.nature || 'Serious',
       moves: [0, 1, 2, 3].map(k => s.moves[k] || ''), sp: {...empty().sp, ...(s.stat_values || {})}};
   });
-  for (const k of Object.keys(openSlot)) delete openSlot[k];  // a fresh overview: every slot collapsed
+  sel = 0;  // a fresh overview: start at the first slot
   message = r.data.problems && r.data.problems.length ? r.data.problems.join('; ') : `Imported ${sets.length} Pokemon.`;
   save();
   await Promise.all([...team.map((_, i) => refreshStats(i)), refreshCoverage()]);
@@ -220,35 +220,45 @@ function field(label, control) {
   return el('label', {class: 'bfield'}, el('span', {class: 'blabel', text: label}), control);
 }
 
-function slotCard(m, i) {
+// The roster: every slot as a mini-card - the whole team, always visible, never cramped.
+function rosterCard(m, i) {
+  const st = stats[i] || {};
+  const cls = 'rcard' + (i === sel ? ' selected' : '') + (m.species ? '' : ' empty');
+  if (!m.species) {
+    return el('button', {class: cls, 'data-slot': String(i), role: 'listitem',
+      onclick: () => { sel = i; render(); }},
+      el('span', {class: 'plus', 'aria-hidden': 'true', text: '+'}),
+      el('span', {class: 'dim', text: `Slot ${i + 1}`}));
+  }
+  const tot = STATS.reduce((a, [k]) => a + (Number(m.sp[k]) || 0), 0);
+  const spread = STATS.filter(([k]) => m.sp[k]).map(([k, n]) => `${m.sp[k]} ${n}`).join(' / ') || 'no spread';
+  return el('button', {class: cls, 'data-slot': String(i), role: 'listitem',
+    'aria-label': `edit slot ${i + 1}: ${st.form || m.species}`,
+    onclick: () => { sel = i; render(); }},
+    el('div', {class: 'rcard-top'},
+      el('strong', {text: st.form || m.species}),
+      el('span', {class: 'small dim' + (tot > 66 ? ' over' : ''), text: `${tot}/66`})),
+    m.item ? el('div', {class: 'small dim', text: `@ ${m.item}`}) : null,
+    el('div', {class: 'small dim', text: `${m.nature} · ${spread}`}),
+    m.moves.filter(Boolean).length ? el('div', {class: 'rmoves'},
+      ...m.moves.filter(Boolean).map(mv => el('span', {class: 'rmove', text: mv}))) : null);
+}
+
+// The editor pane: the full content width for exactly one slot - nothing cramped, nothing cut.
+function editorPane(i) {
+  const m = team[i];
   const s = m.species ? sugg[m.species] : null;
-  const set = (k, v) => { m[k] = v; save(); };
   const species = typeahead(el('input', {type: 'text', placeholder: 'Type a Pokemon (3+ letters)', value: m.species,
     'aria-label': `slot ${i + 1} Pokemon`,
     onchange: e => pickSpecies(i, e.target.value.trim())}),
   'build-species');
   if (!m.species) {
-    return el('div', {class: 'bcard empty'},
+    return el('div', {class: 'bcard empty editor'},
       el('div', {class: 'bcard-empty'}, el('span', {class: 'plus', 'aria-hidden': 'true', text: '+'}),
         el('span', {class: 'dim', text: `Add a Pokemon (slot ${i + 1})`}), species));
   }
   const st = stats[i] || {};
-  // Filled but not opened: one line with the essentials (click to edit)
-  if (!openSlot[i]) {
-    const tot = STATS.reduce((a, [k]) => a + (Number(m.sp[k]) || 0), 0);
-    return el('div', {class: 'bcard collapsed', 'data-slot': String(i)},
-      el('button', {class: 'slotline', 'aria-expanded': 'false', 'aria-label': `edit slot ${i + 1}: ${st.form || m.species}`,
-        onclick: () => { openSlot[i] = true; render(); }},
-        el('strong', {text: st.form || m.species}),
-        ...(st.types || []).slice(0, 2).map(typeChip),
-        m.item ? el('span', {class: 'small dim', text: `@ ${m.item}`}) : null,
-        el('span', {class: 'small dim', text: m.nature || ''}),
-        el('span', {class: 'small dim', text: `${m.moves.filter(Boolean).length} moves`}),
-        el('span', {class: 'small dim' + (tot > 66 ? ' over' : ''), text: `${tot}/66`}),
-        el('span', {class: 'chev', 'aria-hidden': 'true', text: '▸'})),
-      el('button', {class: 'iconbtn slotx', title: 'remove', 'aria-label': `remove slot ${i + 1}`, text: '✕',
-        onclick: async () => { team[i] = empty(); autoRes[i] = null; why[i] = null; delete openSlot[i]; save(); await refreshCoverage(); render(); }}));
-  }
+  const set = (k, v) => { m[k] = v; save(); };
   const item = typeahead(el('input', {type: 'text', placeholder: 'Item', value: m.item,
     onchange: async e => { set('item', e.target.value); m.fixed = {...(m.fixed || {}), item: e.target.value}; save(); await Promise.all([refreshStats(i), refreshCoverage()]); render(); }}), `items-${i}`);
   const abilities = s && s.abilities_possible ? s.abilities_possible : [];
@@ -297,33 +307,28 @@ function slotCard(m, i) {
       el('input', {type: 'checkbox', checked: o.required.has(g.id), 'aria-label': `must meet: ${g.goal}`,
         onchange: e => { if (e.target.checked) o.required.add(g.id); else o.required.delete(g.id); }}),
       ` ${g.met ? (g.full ? '✓' : '½') : '✗'} ${g.goal}`)))) : null;
-  return el('div', {class: 'bcard', 'data-slot': String(i)},
+  return el('div', {class: 'bcard editor', 'data-slot': String(i)},
     el('div', {class: 'bcard-head'},
       el('div', {class: 'bcard-title'},
         el('strong', {text: st.form || m.species}),
         el('div', {class: 'types'}, ...(st.types || []).map(typeChip)),
         el('span', {class: 'small dim', text: m.item ? `@ ${m.item}` : 'no item'})),
       el('div', {class: 'bcard-tools'},
-        el('button', {class: 'iconbtn', title: 'collapse to one line', 'aria-label': 'collapse this slot', text: '▴',
-          onclick: () => { delete openSlot[i]; render(); }}),
         el('button', {class: 'iconbtn', title: 'rebuild moves, item, nature and spread around the current team (keeps what you typed)',
           'aria-label': 'fit to team', text: 'Fit to team', onclick: () => completeSlot(i)}),
         el('button', {class: 'iconbtn', title: 'fill the usual set', 'aria-label': 'fill the usual set', text: 'Usual set', onclick: () => fillUsual(i)}),
         el('button', {class: 'iconbtn', title: 'remove', 'aria-label': 'remove', text: '✕', onclick: async () => { team[i] = empty(); autoRes[i] = null; why[i] = null; save(); await refreshCoverage(); render(); }}))),
     el('div', {class: 'bcard-body'},
-      el('div', {class: 'bcols'},
-        el('div', {},
-          el('div', {class: 'bgrid3'}, field('Pokemon', species), field('Item', item), field('Ability', ability), field('Nature', nature)),
-          el('div', {class: 'bsec-label blabel', text: 'Moves'}),
-          el('div', {class: 'bmoves'}, ...moves),
-          (reasons || needs) ? el('details', {class: 'bsec', open: true},
-            el('summary', {text: 'Why these picks'}), reasons, needs) : null),
-        el('div', {},
-          el('div', {class: 'bsec-label blabel' + (total > 66 ? ' over' : ''), text: `Stat points ${total}/66`}),
-          spTable,
-          el('div', {class: 'actions'}, el('button', {class: 'btn', text: autoRes[i] ? 'Re-run auto spread' : 'Auto spread vs threats',
-            onclick: () => autoSpread(i)}), balance),
-          spreads, goals, usageBlock(s)))),
+      el('div', {class: 'bgrid3'}, field('Pokemon', species), field('Item', item), field('Ability', ability), field('Nature', nature)),
+      el('div', {class: 'bsec-label blabel', text: 'Moves'}),
+      el('div', {class: 'bmoves'}, ...moves),
+      (reasons || needs) ? el('details', {class: 'bsec', open: true},
+        el('summary', {text: 'Why these picks'}), reasons, needs) : null,
+      el('div', {class: 'bsec-label blabel' + (total > 66 ? ' over' : ''), text: `Stat points ${total}/66`}),
+      spTable,
+      el('div', {class: 'actions'}, el('button', {class: 'btn', text: autoRes[i] ? 'Re-run auto spread' : 'Auto spread vs threats',
+        onclick: () => autoSpread(i)}), balance),
+      spreads, goals, usageBlock(s)),
     datalist(`items-${i}`, s && s.items ? s.items : []),
     datalist(`moves-${i}`, moveOptions(s)));
 }
@@ -376,29 +381,6 @@ function coveragePanel() {
     sup.length || (tl.intimidate || []).length ? el('p', {class: 'small',
       text: `Support: ${[...sup, ...(tl.intimidate || []).length ? [`Intimidate (${tl.intimidate.join(', ')})`] : []].join(' · ')}`}) : null,
     c.warnings && c.warnings.length ? el('ul', {class: 'small warn'}, ...c.warnings.map(w => el('li', {text: w}))) : null);
-}
-
-// Sticky team strip: the whole team at a glance; a chip opens (and scrolls to) its slot.
-function teamStrip() {
-  return el('div', {class: 'teamstrip', role: 'list', 'aria-label': 'your team'},
-    ...team.map((m, i) => {
-      const st = stats[i] || {};
-      if (!m.species) return el('button', {class: 'tchip add', role: 'listitem', title: `add to slot ${i + 1}`,
-        onclick: () => scrollToSlot(i)}, `+ ${i + 1}`);
-      const tot = STATS.reduce((a, [k]) => a + (Number(m.sp[k]) || 0), 0);
-      return el('button', {class: 'tchip', role: 'listitem', title: 'open this slot',
-        onclick: () => scrollToSlot(i)},
-        el('strong', {text: st.form || m.species}),
-        el('span', {class: 'dim', text: m.item ? `@ ${m.item}` : 'no item'}),
-        el('span', {class: 'dim' + (tot > 66 ? ' over' : ''), text: `${tot}/66`}));
-    }));
-}
-
-function scrollToSlot(i) {
-  openSlot[i] = true;
-  render();
-  const card = root && root.querySelector(`[data-slot="${i}"]`);
-  if (card) card.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
 // The whole-team actions, always in reach at the top (used to be scattered at the bottom).
@@ -464,11 +446,13 @@ function render() {
       }})))) : null);
   const body = tab === 'analysis' ? analysisPanel(matesBlock)
     : tab === 'share' ? sharePanel(out)
-    : el('div', {class: 'bcards'}, ...team.map(slotCard));
+    : el('div', {class: 'team-layout'},
+        el('div', {class: 'roster', role: 'list', 'aria-label': 'your team'}, ...team.map(rosterCard)),
+        editorPane(Math.min(Math.max(sel, 0), 5)));
   clear(root,
     el('h2', {text: fmt === 'singles' ? 'Build: singles (BSS Reg M-C)' : 'Build: VGC (Reg M-C)'}),
     datalist('build-species', (speciesList || []).map(x => ({name: x}))),
-    el('div', {class: 'buildbar'}, teamStrip(),
+    el('div', {class: 'buildbar'},
       el('div', {class: 'actionbar'},
         el('div', {class: 'segments', role: 'tablist', 'aria-label': 'Build sections'},
           segBtn('team', 'Team'), segBtn('analysis', 'Analysis'), segBtn('share', 'Share')),
@@ -479,7 +463,7 @@ function render() {
 export async function renderBuild(el_) {
   root = el_;
   if (apiFormat.value !== fmt) {  // switched on the Teams tab
-    fmt = apiFormat.value; team = load(); speciesList = null; mates = null; coverage = null;
+    fmt = apiFormat.value; team = load(); speciesList = null; mates = null; coverage = null; sel = 0;
     for (const o of [sugg, stats, autoRes, why]) for (const k of Object.keys(o)) delete o[k];
   }
   if (!speciesList) {
